@@ -10,12 +10,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// MongoDB Connection
-const MONGODB_URI = 'mongodb+srv://sandeep05kumar1997_db_user:DbXbLWP19@pps.grrdy3k.mongodb.net/complaintDB?retryWrites=true&w=majority&appName=pps';
+// MongoDB Connection String
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://sandeep05kumar1997_db_user:YOUR_PASSWORD@pps.grrdy3k.mongodb.net/complaintDB?retryWrites=true&w=majority&appName=pps';
 
-mongoose.connect(MONGODB_URI.replace('<db_password>', 'YOUR_PASSWORD_HERE'))
-  .then(() => console.log('MongoDB se successfully connect ho gaya!'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+// MongoDB Connection
+mongoose.connect(MONGODB_URI)
+  .then(() => console.log('✅ MongoDB se successfully connect ho gaya!'))
+  .catch((err) => {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1);
+  });
 
 // Complaint Schema
 const complaintSchema = new mongoose.Schema({
@@ -62,7 +66,26 @@ const Complaint = mongoose.model('Complaint', complaintSchema);
 
 // Home Route
 app.get('/', (req, res) => {
-  res.json({ message: 'Complaint System API chal raha hai!' });
+  res.json({ 
+    message: '🚔 Bihar Police Complaint System API',
+    status: 'Running',
+    endpoints: {
+      submit: 'POST /api/complaints',
+      getAll: 'GET /api/complaints',
+      getOne: 'GET /api/complaints/:id',
+      update: 'PATCH /api/complaints/:id',
+      delete: 'DELETE /api/complaints/:id'
+    }
+  });
+});
+
+// Health Check Route (Vercel ke liye)
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
+  });
 });
 
 // Submit Complaint
@@ -75,6 +98,23 @@ app.post('/api/complaints', async (req, res) => {
       return res.status(400).json({ 
         success: false, 
         message: 'Sabhi fields zaroori hain!' 
+      });
+    }
+
+    // Mobile validation
+    if (!/^[0-9]{10}$/.test(mobile)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mobile number 10 digits ka hona chahiye!'
+      });
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid email address daalen!'
       });
     }
 
@@ -201,7 +241,31 @@ app.delete('/api/complaints/:id', async (req, res) => {
   }
 });
 
-// Start Server
-app.listen(PORT, () => {
-  console.log(`Server port ${PORT} par chal raha hai`);
+// 404 Handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route nahi mila'
+  });
 });
+
+// Error Handler
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    success: false,
+    message: 'Kuch galat ho gaya!',
+    error: err.message
+  });
+});
+
+// Start Server (Local development ke liye)
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server port ${PORT} par chal raha hai`);
+    console.log(`📍 http://localhost:${PORT}`);
+  });
+}
+
+// Export for Vercel
+module.exports = app;
